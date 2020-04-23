@@ -629,6 +629,7 @@ workflows:
             branches:
               only:
                 - master
+                - /test\/bucketexists-delay-ci/
                 - beta
                 - split-test
           requires:
@@ -638,6 +639,7 @@ workflows:
             branches:
               only:
                 - master
+                - /test\/bucketexists-delay-ci/
                 - split-test
           requires:
             - publish_to_local_registry
