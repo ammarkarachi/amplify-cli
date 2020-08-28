@@ -18,6 +18,7 @@ import { EventEmitter } from 'events';
 import { rewireDeprecatedCommands } from './rewireDeprecatedCommands';
 import { ensureMobileHubCommandCompatibility } from './utils/mobilehub-support';
 import { postInstallInitialization } from './utils/post-install-initialization';
+import { conditionalLoggingInit } from './conditional-local-logging-init';
 EventEmitter.defaultMaxListeners = 1000;
 
 // entry from commandline
@@ -47,7 +48,6 @@ export async function run() {
       input = getCommandLineInput(pluginPlatform);
       verificationResult = verifyInput(pluginPlatform, input);
     }
-
     if (!verificationResult.verified) {
       if (verificationResult.helpCommandAvailable) {
         input.command = constants.HELP;
