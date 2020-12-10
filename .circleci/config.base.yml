@@ -852,6 +852,7 @@ workflows:
               only:
                 - master
                 - iterative-update
+                - fix-logging-instance
           requires:
             - build
             - mock_e2e_tests
