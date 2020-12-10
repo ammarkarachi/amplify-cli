@@ -29,7 +29,7 @@ import 'isomorphic-fetch';
 
 jest.setTimeout(2000000);
 
-describe(`ModelAuthTests`, () => {
+describe.only(`ModelAuthTests`, () => {
   const cf = new CloudFormationClient('us-west-2');
 
   const BUILD_TIMESTAMP = moment().format('YYYYMMDDHHmmss');
