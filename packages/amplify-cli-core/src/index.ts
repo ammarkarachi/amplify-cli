@@ -16,6 +16,7 @@ export * from './cliConstants';
 export * from './deploymentSecretsHelper';
 export * from './deploymentState';
 export * from './utils';
+export * from './log-workflow';
 
 // Temporary types until we can finish full type definition across the whole CLI
 

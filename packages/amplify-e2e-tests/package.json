@@ -17,7 +17,7 @@
   ],
   "private": true,
   "scripts": {
-    "e2e": "npm run setup-profile && jest --verbose",
+    "e2e": "npm run setup-profile && jest --verbose -i",
     "setup-profile": "ts-node ./src/configure_tests.ts"
   },
   "dependencies": {

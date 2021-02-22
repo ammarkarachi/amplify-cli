@@ -15,10 +15,13 @@ declare global {
 
 import { isRegExp, format } from 'util';
 import { Recorder } from '../asciinema-recorder';
+import { readFileSync, writeFileSync, ensureDirSync, existsSync } from 'fs-extra';
+import * as path from 'path';
 import { AssertionError } from 'assert';
 import strip = require('strip-ansi');
-import { EOL } from 'os';
+import { EOL, homedir } from 'os';
 import retimer = require('retimer');
+import { getState } from 'amplify-cli-core';
 
 const DEFAULT_NO_OUTPUT_TIMEOUT = 5 * 60 * 1000; // 5 Minutes
 const EXIT_CODE_TIMEOUT = 2;
@@ -37,6 +40,11 @@ type ExecutionStep = {
   expectation?: any;
 };
 
+type workflow = {
+  question: string;
+  answer: string;
+  timestamp: number;
+};
 export type Context = {
   command: string;
   cwd: string | undefined;
@@ -47,6 +55,8 @@ export type Context = {
   stripColors: boolean;
   process: Recorder | undefined;
   noOutputTimeout: number;
+  workflows: workflow[];
+  captureNext: boolean;
   getRecording: () => string;
 };
 
@@ -127,6 +137,14 @@ function chain(context: Context): ExecutionContext {
       let _wait: ExecutionStep = {
         fn: data => {
           var val = testExpectation(data, expectation, context);
+          if (val || context.captureNext) {
+            context.workflows.push({
+              question: data,
+              answer: '',
+              timestamp: new Date().getTime(),
+            });
+            context.captureNext = false;
+          }
           if (val === true && typeof callback === 'function') {
             callback(data);
           }
@@ -144,6 +162,7 @@ function chain(context: Context): ExecutionContext {
     sendLine: function (line: string): ExecutionContext {
       let _sendline: ExecutionStep = {
         fn: () => {
+          applyAnswerToLatesWorkflow(context, line, true);
           context.process.write(`${line}${EOL}`);
           return true;
         },
@@ -158,6 +177,7 @@ function chain(context: Context): ExecutionContext {
     sendCarriageReturn: function (): ExecutionContext {
       let _sendline: ExecutionStep = {
         fn: () => {
+          applyAnswerToLatesWorkflow(context, 'Enter', true);
           context.process.write(EOL);
           return true;
         },
@@ -173,6 +193,7 @@ function chain(context: Context): ExecutionContext {
       var _send: ExecutionStep = {
         fn: () => {
           context.process.write(line);
+          applyAnswerToLatesWorkflow(context, line, false);
           return true;
         },
         name: '_send',
@@ -190,6 +211,7 @@ function chain(context: Context): ExecutionContext {
           for (let i = 0; i < repeatitions; i++) {
             context.process.write(KEY_DOWN_ARROW);
           }
+          applyAnswerToLatesWorkflow(context, `${repeatitions} DOWN`, false);
           return true;
         },
         name: '_send',
@@ -207,6 +229,7 @@ function chain(context: Context): ExecutionContext {
           for (let i = 0; i < repeatitions; i++) {
             context.process.write(KEY_UP_ARROW);
           }
+          applyAnswerToLatesWorkflow(context, `${repeatitions} UP`, false);
           return true;
         },
         name: '_send',
@@ -220,6 +243,7 @@ function chain(context: Context): ExecutionContext {
     sendConfirmYes: function (): ExecutionContext {
       var _send: ExecutionStep = {
         fn: () => {
+          applyAnswerToLatesWorkflow(context, 'Y', true);
           context.process.write(`Y${EOL}`);
           return true;
         },
@@ -234,6 +258,7 @@ function chain(context: Context): ExecutionContext {
     sendConfirmNo: function (): ExecutionContext {
       var _send: ExecutionStep = {
         fn: () => {
+          applyAnswerToLatesWorkflow(context, 'N', true);
           context.process.write(`N${EOL}`);
           return true;
         },
@@ -286,6 +311,8 @@ function chain(context: Context): ExecutionContext {
       const exitHandler = (code: number, signal: any) => {
         noOutputTimer.clear();
         context.process.removeOnExitHandlers(exitHandler);
+        recordData(context);
+
         if (code !== 0) {
           if (code === EXIT_CODE_TIMEOUT) {
             const err = new Error(
@@ -530,6 +557,30 @@ function chain(context: Context): ExecutionContext {
   };
 }
 
+function recordData(context: Context, arns: string[] = undefined) {
+  const logPathDir = path.join(homedir(), 'workflowlogs');
+  ensureDirSync(logPathDir);
+  const logPath = path.join(logPathDir, 'logs.json');
+  const data = [];
+  if (existsSync(logPath)) {
+    data.push(...JSON.parse(readFileSync(logPath, 'utf-8')));
+  }
+  data.push({
+    commands: context.params,
+    workflows: context.workflows,
+    identifier: process.env.WORKFLOW_ID,
+    arns: getState(context.cwd),
+    testName: expect.getState().currentTestName,
+  });
+  writeFileSync(logPath, JSON.stringify(data, null, 4));
+}
+
+function applyAnswerToLatesWorkflow(context: Context, answer: string, captureNext: boolean) {
+  const currentWorkflow = context.workflows[context.workflows.length - 1];
+  currentWorkflow.answer += answer;
+  context.captureNext = captureNext;
+}
+
 function testExpectation(data: string, expectation: string | RegExp, context: Context): boolean {
   if (isRegExp(expectation)) {
     return expectation.test(data);
@@ -609,8 +660,10 @@ export function nspawn(command: string | string[], params: string[] = [], option
     noOutputTimeout: options.noOutputTimeout || DEFAULT_NO_OUTPUT_TIMEOUT,
     params: params,
     queue: [],
+    workflows: [],
     stripColors: options.stripColors,
     process: undefined,
+    captureNext: false,
     getRecording: () => {
       if (context.process) {
         return context.process.getRecording();
